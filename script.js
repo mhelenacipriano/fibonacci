@@ -22,6 +22,12 @@
     minTipDistance: 50,     // keeps tip off the exact center
     minScaleFactor: 0.25,   // clamp so the spiral can shrink far but not vanish
     maxScaleFactor: 3.2,    // clamp so the spiral cannot explode off screen
+
+    // --- Experimental shape params (exposed via the "experiment further" panel)
+    angleStep: 1,           // multiplier on the per-section quarter turn
+    radiusCurve: 1,         // power applied to t before the Fibonacci blend
+    aspectRatio: 1,         // x/y stretch; 1 = circular, >1 wide, <1 tall
+    opacityFloor: 0.38,     // opacity at the innermost character (tip = 1.0)
   };
 
   const stage = document.getElementById("stage");
@@ -120,20 +126,30 @@
 
     for (let s = 0; s < sampleCount; s += 1) {
       const t = s / (sampleCount - 1);
-      const scaled = t * totalSections;
-      const sectionIndex = Math.min(totalSections - 1, Math.floor(scaled));
-      const localT = scaled - sectionIndex;
+
+      // Radius growth is governed by a re-shaped parameter so that
+      // radiusCurve < 1 front-loads the growth (fat outer) and > 1 back-loads
+      // it (tight inner, explosive outer).
+      const tRadius = Math.pow(t, config.radiusCurve);
+      const scaledR = tRadius * totalSections;
+      const sectionIndex = Math.min(totalSections - 1, Math.floor(scaledR));
+      const localR = scaledR - sectionIndex;
 
       const innerFib = usableFib[sectionIndex];
       const outerFib = usableFib[sectionIndex + 1];
 
-      const radius = lerp(innerFib, outerFib, localT) * config.scale;
-      const theta = sectionIndex * (Math.PI / 2) + localT * (Math.PI / 2);
+      const radius = lerp(innerFib, outerFib, localR) * config.scale;
+
+      // Angle grows uniformly with t. angleStep multiplies the total winding,
+      // letting the user tighten or loosen the coil independently of radius.
+      const theta = t * totalSections * (Math.PI / 2) * config.angleStep;
 
       const normalizedRadius = radius / (maxFib * config.scale);
       const centeredRadius = radius * (1 - normalizedRadius * config.centerPull);
 
-      const x = Math.cos(theta) * centeredRadius;
+      // aspectRatio squashes/stretches the horizontal axis for elliptical
+      // variations of the shape.
+      const x = Math.cos(theta) * centeredRadius * config.aspectRatio;
       const y = -Math.sin(theta) * centeredRadius;
 
       if (s > 0) cumArcLen += Math.hypot(x - prevX, y - prevY);
@@ -280,11 +296,98 @@
       node.style.transform = `translate3d(${finalX}px, ${finalY}px, 0)`;
 
       // Opacity ramps toward the tip to emphasize the cursor-following end.
+      // opacityFloor lets the user set the innermost character's opacity; the
+      // tip is always fully opaque.
       const progress = i / (activeCount - 1);
-      node.style.opacity = (0.38 + progress * 0.62).toFixed(3);
+      const floor = config.opacityFloor;
+      node.style.opacity = (floor + (1 - floor) * progress).toFixed(3);
     }
 
     requestAnimationFrame(render);
+  }
+
+  // ----- Controls panel ------------------------------------------------------
+
+  function formatConfigValue(value) {
+    if (typeof value === "string") return value;
+    if (Number.isInteger(value)) return String(value);
+    return value.toFixed(2);
+  }
+
+  function applyConfigChange(key) {
+    if (key === "fontSize") {
+      for (const node of nodes) {
+        node.style.fontSize = `${config.fontSize}px`;
+      }
+    } else if (key === "charSet") {
+      generateRandomCharSequence();
+      nodes.forEach((node, i) => {
+        node.textContent = randomChars[i];
+      });
+    } else if (
+      key === "scale" ||
+      key === "centerPull" ||
+      key === "angleStep" ||
+      key === "radiusCurve" ||
+      key === "aspectRatio"
+    ) {
+      // These change the geometry of the base spiral itself.
+      buildBaseSpiralSamples();
+    }
+    // charSpacing, smoothing, opacityFloor, min/maxScaleFactor take effect
+    // automatically on the next frame.
+  }
+
+  function shuffleCharacters() {
+    generateRandomCharSequence();
+    nodes.forEach((node, i) => {
+      node.textContent = randomChars[i];
+    });
+  }
+
+  function bindControls() {
+    const panel = document.getElementById("controls");
+    if (!panel) return;
+
+    // Seed each input/output with the current config value.
+    panel.querySelectorAll("input[data-key]").forEach((input) => {
+      const key = input.dataset.key;
+      const value = config[key];
+      input.value = typeof value === "number" ? String(value) : value;
+
+      const out = panel.querySelector(`output[data-key="${key}"]`);
+      if (out) out.textContent = formatConfigValue(value);
+    });
+
+    panel.addEventListener("input", (event) => {
+      const target = event.target;
+      const key = target.dataset?.key;
+      if (!key) return;
+
+      let value;
+      if (target.type === "range") {
+        value = Number.parseFloat(target.value);
+      } else {
+        // If the user clears the charset, fall back to a single dot so the
+        // spiral still has something to render.
+        value = target.value.length ? target.value : ".";
+      }
+
+      config[key] = value;
+
+      const out = panel.querySelector(`output[data-key="${key}"]`);
+      if (out) out.textContent = formatConfigValue(value);
+
+      applyConfigChange(key);
+    });
+
+    // Prevent pause-on-click when interacting with the panel, and handle
+    // command buttons like "shuffle characters".
+    panel.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const action = event.target?.dataset?.action;
+      if (action === "shuffle") shuffleCharacters();
+    });
   }
 
   // ----- Lifecycle -----------------------------------------------------------
@@ -300,6 +403,7 @@
     generateRandomCharSequence();
     buildBaseSpiralSamples();
     ensureNodePool();
+    bindControls();
 
     updateTargetFromMouse(centerX + 180, centerY - 120);
     currentAngle = targetAngle;

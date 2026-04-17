@@ -14,6 +14,83 @@
       <div id="spiral" aria-hidden="true"></div>
     </main>
 
+    <aside id="controls" aria-label="Spiral controls">
+      <details class="panel" open>
+        <summary>CONTROLS</summary>
+
+        <div class="panel-body">
+          <label class="ctl">
+            <span>font size <output data-key="fontSize"></output></span>
+            <input type="range" data-key="fontSize" min="8" max="32" step="1" />
+          </label>
+
+          <label class="ctl">
+            <span>char spacing <output data-key="charSpacing"></output></span>
+            <input type="range" data-key="charSpacing" min="6" max="40" step="1" />
+          </label>
+
+          <label class="ctl">
+            <span>smoothing <output data-key="smoothing"></output></span>
+            <input type="range" data-key="smoothing" min="0.02" max="0.3" step="0.01" />
+          </label>
+
+          <label class="ctl">
+            <span>scale <output data-key="scale"></output></span>
+            <input type="range" data-key="scale" min="2" max="12" step="0.1" />
+          </label>
+
+          <label class="ctl">
+            <span>center pull <output data-key="centerPull"></output></span>
+            <input type="range" data-key="centerPull" min="0" max="0.5" step="0.01" />
+          </label>
+
+          <label class="ctl">
+            <span>min scale <output data-key="minScaleFactor"></output></span>
+            <input type="range" data-key="minScaleFactor" min="0.1" max="1" step="0.05" />
+          </label>
+
+          <label class="ctl">
+            <span>max scale <output data-key="maxScaleFactor"></output></span>
+            <input type="range" data-key="maxScaleFactor" min="1" max="6" step="0.1" />
+          </label>
+
+          <label class="ctl">
+            <span>charset</span>
+            <input type="text" data-key="charSet" spellcheck="false" autocomplete="off" />
+          </label>
+
+          <details class="more">
+            <summary>
+              <span class="arrow" aria-hidden="true">&#9656;</span>
+              <span>experiment further</span>
+            </summary>
+
+            <label class="ctl">
+              <span>angle step <output data-key="angleStep"></output></span>
+              <input type="range" data-key="angleStep" min="0.25" max="2.5" step="0.05" />
+            </label>
+
+            <label class="ctl">
+              <span>radius curve <output data-key="radiusCurve"></output></span>
+              <input type="range" data-key="radiusCurve" min="0.4" max="2.5" step="0.05" />
+            </label>
+
+            <label class="ctl">
+              <span>aspect ratio <output data-key="aspectRatio"></output></span>
+              <input type="range" data-key="aspectRatio" min="0.4" max="2.5" step="0.05" />
+            </label>
+
+            <label class="ctl">
+              <span>opacity floor <output data-key="opacityFloor"></output></span>
+              <input type="range" data-key="opacityFloor" min="0" max="1" step="0.05" />
+            </label>
+
+            <button type="button" class="cmd" data-action="shuffle">[ shuffle chars ]</button>
+          </details>
+        </div>
+      </details>
+    </aside>
+
     <script src="script.js"></script>
   </body>
 </html>
