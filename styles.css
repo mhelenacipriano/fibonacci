@@ -1,0 +1,53 @@
+:root {
+  --bg: #000000;
+  --fg: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Perfect DOS VGA 437", "Cascadia Mono", "Consolas",
+    "Lucida Console", "Courier New", monospace;
+}
+
+#stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  cursor: crosshair;
+}
+
+#spiral {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.spiral-char {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--fg);
+  white-space: pre;
+  user-select: none;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  line-height: 1;
+  opacity: 0.96;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.08);
+}

@@ -1,0 +1,309 @@
+(() => {
+  /**
+   * Fibonacci text spiral
+   * ---------------------
+   * The spiral is built from chained quarter-turn arcs whose radii grow
+   * along the Fibonacci sequence. We densely sample the shape once,
+   * record cumulative arc lengths, then at every frame place characters
+   * at fixed pixel spacing along the (scaled, rotated) curve so the
+   * outermost character lands exactly under the cursor.
+   */
+
+  const config = {
+    fontSize: 14,
+    charSpacing: 16,        // fixed pixel distance between neighboring chars
+    maxCharacterCount: 1100, // pool cap for performance
+    charSet: "01-/·+*",
+    smoothing: 0.09,
+    scale: 5.2,             // static multiplier controlling base spiral size
+    centerPull: 0.16,
+    minFibSections: 8,
+    maxFibSections: 12,
+    minTipDistance: 50,     // keeps tip off the exact center
+    minScaleFactor: 0.25,   // clamp so the spiral can shrink far but not vanish
+    maxScaleFactor: 3.2,    // clamp so the spiral cannot explode off screen
+  };
+
+  const stage = document.getElementById("stage");
+  const spiral = document.getElementById("spiral");
+
+  let width = window.innerWidth;
+  let height = window.innerHeight;
+  let centerX = width / 2;
+  let centerY = height / 2;
+
+  // Densely sampled polyline of the base spiral with cumulative arc length
+  // at each sample. We then sample characters along it by arc-length lookup.
+  let baseSamples = [];
+  let baseTotalArcLen = 0;
+
+  // Natural polar coordinates of the spiral tip — used to derive the
+  // rotation + scale that put the tip exactly at the cursor.
+  let tipNaturalAngle = 0;
+  let tipNaturalRadius = 1;
+
+  // Target values the renderer eases toward each frame.
+  let targetAngle = 0;
+  let targetScale = 1;
+  let currentAngle = 0;
+  let currentScale = 1;
+
+  // Pool of reusable DOM nodes and their assigned (random) characters.
+  let nodes = [];
+  let randomChars = [];
+
+  // ----- Math helpers --------------------------------------------------------
+
+  function fibonacciSequence(length) {
+    const values = [1, 1];
+    while (values.length < length) {
+      values.push(values.at(-1) + values.at(-2));
+    }
+    return values;
+  }
+
+  function lerp(start, end, t) {
+    return start + (end - start) * t;
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function normalizeAngle(angle) {
+    while (angle > Math.PI) angle -= Math.PI * 2;
+    while (angle < -Math.PI) angle += Math.PI * 2;
+    return angle;
+  }
+
+  // ----- Base spiral ---------------------------------------------------------
+
+  /**
+   * Produce a dense polyline approximation of the spiral.
+   *
+   * The curve is parametrized by t in [0, 1]. We split t across
+   * `totalSections` quarter-turn Fibonacci sections. Within each section the
+   * radius blends linearly between Fib(n) and Fib(n+1), producing the
+   * Fibonacci-inspired growth. A small centerPull term nudges outer points
+   * slightly inward so the whole piece feels compact.
+   */
+  function buildBaseSpiralSamples() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    centerX = width / 2;
+    centerY = height / 2;
+
+    const viewportLimit = Math.min(width, height);
+    const safeRadius = viewportLimit * 0.38;
+
+    const fib = fibonacciSequence(15);
+
+    let sectionCount = config.minFibSections;
+    for (let i = config.minFibSections; i <= config.maxFibSections; i += 1) {
+      if (fib[i] * config.scale <= safeRadius) sectionCount = i;
+    }
+
+    const usableFib = fib.slice(0, sectionCount + 1);
+    const maxFib = usableFib.at(-1);
+    const totalSections = usableFib.length - 1;
+
+    const sampleCount = 4000;
+    baseSamples = new Array(sampleCount);
+
+    let cumArcLen = 0;
+    let prevX = 0;
+    let prevY = 0;
+
+    for (let s = 0; s < sampleCount; s += 1) {
+      const t = s / (sampleCount - 1);
+      const scaled = t * totalSections;
+      const sectionIndex = Math.min(totalSections - 1, Math.floor(scaled));
+      const localT = scaled - sectionIndex;
+
+      const innerFib = usableFib[sectionIndex];
+      const outerFib = usableFib[sectionIndex + 1];
+
+      const radius = lerp(innerFib, outerFib, localT) * config.scale;
+      const theta = sectionIndex * (Math.PI / 2) + localT * (Math.PI / 2);
+
+      const normalizedRadius = radius / (maxFib * config.scale);
+      const centeredRadius = radius * (1 - normalizedRadius * config.centerPull);
+
+      const x = Math.cos(theta) * centeredRadius;
+      const y = -Math.sin(theta) * centeredRadius;
+
+      if (s > 0) cumArcLen += Math.hypot(x - prevX, y - prevY);
+      baseSamples[s] = { x, y, arcLen: cumArcLen };
+      prevX = x;
+      prevY = y;
+    }
+
+    baseTotalArcLen = cumArcLen;
+
+    const tip = baseSamples.at(-1);
+    tipNaturalRadius = Math.hypot(tip.x, tip.y) || 1;
+    tipNaturalAngle = Math.atan2(tip.y, tip.x);
+  }
+
+  /**
+   * Return the interpolated (x, y) on the base spiral at a given cumulative
+   * arc length (in base-space units). Uses binary search on the samples.
+   */
+  function sampleAtArcLength(target) {
+    if (target <= 0) return { x: 0, y: 0 };
+    if (target >= baseTotalArcLen) {
+      const tip = baseSamples.at(-1);
+      return { x: tip.x, y: tip.y };
+    }
+
+    let lo = 0;
+    let hi = baseSamples.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (baseSamples[mid].arcLen < target) lo = mid;
+      else hi = mid;
+    }
+
+    const a = baseSamples[lo];
+    const b = baseSamples[hi];
+    const span = b.arcLen - a.arcLen || 1;
+    const k = (target - a.arcLen) / span;
+    return {
+      x: a.x + (b.x - a.x) * k,
+      y: a.y + (b.y - a.y) * k,
+    };
+  }
+
+  // ----- DOM pool ------------------------------------------------------------
+
+  function generateRandomCharSequence() {
+    randomChars = new Array(config.maxCharacterCount);
+    for (let i = 0; i < config.maxCharacterCount; i += 1) {
+      randomChars[i] = config.charSet[
+        Math.floor(Math.random() * config.charSet.length)
+      ];
+    }
+  }
+
+  function ensureNodePool() {
+    if (nodes.length === config.maxCharacterCount) return;
+
+    spiral.innerHTML = "";
+    nodes = new Array(config.maxCharacterCount);
+
+    for (let i = 0; i < config.maxCharacterCount; i += 1) {
+      const node = document.createElement("span");
+      node.className = "spiral-char";
+      node.style.fontSize = `${config.fontSize}px`;
+      node.textContent = randomChars[i];
+      node.style.display = "none";
+      spiral.appendChild(node);
+      nodes[i] = node;
+    }
+  }
+
+  // ----- Interaction ---------------------------------------------------------
+
+  /**
+   * Map a cursor position to the rotation and scale that place the spiral
+   * tip under it.
+   *
+   *   rotation = mouseAngle - tipNaturalAngle
+   *   scale    = mouseDistance / tipNaturalRadius
+   */
+  function updateTargetFromMouse(clientX, clientY) {
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    const distance = Math.max(Math.hypot(dx, dy), config.minTipDistance);
+
+    targetAngle = Math.atan2(dy, dx) - tipNaturalAngle;
+    targetScale = clamp(
+      distance / tipNaturalRadius,
+      config.minScaleFactor,
+      config.maxScaleFactor
+    );
+  }
+
+  // ----- Render loop ---------------------------------------------------------
+
+  function render() {
+    currentAngle += normalizeAngle(targetAngle - currentAngle) * config.smoothing;
+    currentScale += (targetScale - currentScale) * config.smoothing;
+
+    const cos = Math.cos(currentAngle);
+    const sin = Math.sin(currentAngle);
+
+    // Total arc length of the spiral in screen pixels, at the current scale.
+    const totalScaledArcLen = baseTotalArcLen * currentScale;
+
+    // Decide how many characters are needed right now so that the spacing
+    // between them stays ~ charSpacing pixels, and the final character lands
+    // exactly at the tip (under the cursor).
+    const activeCount = Math.min(
+      config.maxCharacterCount,
+      Math.max(2, Math.round(totalScaledArcLen / config.charSpacing) + 1)
+    );
+    const actualSpacing = totalScaledArcLen / (activeCount - 1);
+
+    for (let i = 0; i < config.maxCharacterCount; i += 1) {
+      const node = nodes[i];
+
+      if (i >= activeCount) {
+        if (node.style.display !== "none") node.style.display = "none";
+        continue;
+      }
+      if (node.style.display === "none") node.style.display = "";
+
+      // Arc length along the scaled spiral, then converted back to the
+      // base-space arc length used by the sampler.
+      const baseArcLen = (i * actualSpacing) / currentScale;
+      const point = sampleAtArcLength(baseArcLen);
+
+      const scaledX = point.x * currentScale;
+      const scaledY = point.y * currentScale;
+
+      const rotatedX = scaledX * cos - scaledY * sin;
+      const rotatedY = scaledX * sin + scaledY * cos;
+
+      const finalX = centerX + rotatedX;
+      const finalY = centerY + rotatedY;
+
+      node.style.transform = `translate3d(${finalX}px, ${finalY}px, 0)`;
+
+      // Opacity ramps toward the tip to emphasize the cursor-following end.
+      const progress = i / (activeCount - 1);
+      node.style.opacity = (0.38 + progress * 0.62).toFixed(3);
+    }
+
+    requestAnimationFrame(render);
+  }
+
+  // ----- Lifecycle -----------------------------------------------------------
+
+  function handleResize() {
+    buildBaseSpiralSamples();
+    updateTargetFromMouse(centerX + 180, centerY - 120);
+    currentAngle = targetAngle;
+    currentScale = targetScale;
+  }
+
+  function init() {
+    generateRandomCharSequence();
+    buildBaseSpiralSamples();
+    ensureNodePool();
+
+    updateTargetFromMouse(centerX + 180, centerY - 120);
+    currentAngle = targetAngle;
+    currentScale = targetScale;
+
+    stage.addEventListener("mousemove", (event) => {
+      updateTargetFromMouse(event.clientX, event.clientY);
+    });
+
+    window.addEventListener("resize", handleResize);
+
+    requestAnimationFrame(render);
+  }
+
+  init();
+})();
