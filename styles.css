@@ -20,12 +20,15 @@ body {
   color: var(--fg);
   font-family: "Perfect DOS VGA 437", "Cascadia Mono", "Consolas",
     "Lucida Console", "Courier New", monospace;
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
 }
 
 #stage {
   position: relative;
-  width: 100vw;
-  height: 100vh;
+  flex: 1 1 auto;
+  height: 100%;
   overflow: hidden;
   background: var(--bg);
   cursor: crosshair;
@@ -55,17 +58,15 @@ body {
 /* ---------- DOS-style control panel ---------- */
 
 #controls {
-  position: fixed;
-  top: 18px;
-  left: 18px;
-  z-index: 10;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 7px;
-  min-width: 250px;
-  padding: 10px 14px 14px;
+  width: 280px;
+  height: 100%;
+  padding: 18px 18px 22px;
   background: #000;
-  /* border: 3px double #fff; */
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 0;
   color: #fff;
   font-family: "Perfect DOS VGA 437", "Cascadia Mono", "Consolas",
@@ -77,6 +78,7 @@ body {
   user-select: none;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: grayscale;
+  overflow-y: auto;
 }
 
 /* Shared styles for every disclosure (CONTROLS and EXPERIMENT FURTHER). */

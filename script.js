@@ -104,8 +104,10 @@
    * slightly inward so the whole piece feels compact.
    */
   function buildBaseSpiralSamples() {
-    width = window.innerWidth;
-    height = window.innerHeight;
+    // Size and center are read from the stage itself — the controls panel is
+    // a sibling, so the stage occupies only the remaining viewport area.
+    width = stage.clientWidth;
+    height = stage.clientHeight;
     centerX = width / 2;
     centerY = height / 2;
 
@@ -466,7 +468,8 @@
 
     stage.addEventListener("mousemove", (event) => {
       if (paused) return;
-      updateTargetFromMouse(event.clientX, event.clientY);
+      const rect = stage.getBoundingClientRect();
+      updateTargetFromMouse(event.clientX - rect.left, event.clientY - rect.top);
     });
 
     // Click toggles pause. While paused the render loop keeps running but
