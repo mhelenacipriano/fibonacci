@@ -255,6 +255,7 @@ body {
 #controls details.more[open] {
   flex: 1 1 auto;
   justify-content: space-between;
+  gap: 7px;
 }
 
 #controls .cmd {
