@@ -49,7 +49,7 @@ body {
   will-change: transform;
   line-height: 1;
   opacity: 0.96;
-  text-shadow: 0 0 6px rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0 var(--glow, 6px) rgba(255, 255, 255, 0.2);
 }
 
 /* ---------- DOS-style control panel ---------- */
@@ -79,34 +79,40 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-#controls details.panel > summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 3px 8px;
-  letter-spacing: 0.32em;
-  margin: -10px -14px 0;
-  font-weight: bold;
+/* Shared styles for every disclosure (CONTROLS and EXPERIMENT FURTHER). */
+
+#controls details > summary {
   list-style: none;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  letter-spacing: 0.12em;
+  font-weight: bold;
 }
 
-#controls details.panel[open] > summary {
-  margin-bottom: 6px;
-}
-
-#controls details.panel > summary::-webkit-details-marker,
-#controls details.panel > summary::marker {
+#controls details > summary::-webkit-details-marker,
+#controls details > summary::marker {
   display: none;
   content: "";
 }
 
-#controls details.panel > summary::before,
-#controls details.panel > summary::after {
-  content: "";
-  flex: 1;
-  height: 0;
-  border-top: 1px dashed #fff;
+#controls details > summary .arrow {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+  transition: transform 120ms ease;
+}
+
+#controls details[open] > summary .arrow {
+  transform: rotate(90deg);
+}
+
+/* Panel-specific layout tweaks. */
+
+#controls details.panel[open] > summary {
+  margin-bottom: 2px;
 }
 
 #controls details.panel .panel-body {
@@ -218,41 +224,13 @@ body {
   color: #fff;
 }
 
-/* Collapsible "experiment further" section */
+/* Nested "experiment further" disclosure spacing. */
 
 #controls details.more {
   display: flex;
   flex-direction: column;
   gap: 7px;
   margin-top: 4px;
-}
-
-#controls details.more summary {
-  list-style: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 0;
-  letter-spacing: 0.12em;
-  font-weight: bold;
-}
-
-#controls details.more summary::-webkit-details-marker,
-#controls details.more summary::marker {
-  display: none;
-  content: "";
-}
-
-#controls details.more summary .arrow {
-  display: inline-block;
-  width: 1ch;
-  text-align: center;
-  transition: transform 120ms ease;
-}
-
-#controls details.more[open] summary .arrow {
-  transform: rotate(90deg);
 }
 
 #controls .cmd {

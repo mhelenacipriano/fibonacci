@@ -24,10 +24,13 @@
     maxScaleFactor: 3.2,    // clamp so the spiral cannot explode off screen
 
     // --- Experimental shape params (exposed via the "experiment further" panel)
-    angleStep: 1,           // multiplier on the per-section quarter turn
+    angleStep: 1,           // multiplier on the per-section quarter turn; negative reverses winding
     radiusCurve: 1,         // power applied to t before the Fibonacci blend
     aspectRatio: 1,         // x/y stretch; 1 = circular, >1 wide, <1 tall
     opacityFloor: 0.38,     // opacity at the innermost character (tip = 1.0)
+    rotationOffset: 0,      // static rotation added to the base spiral, in degrees
+    radialJitter: 0,        // pixels of random radial noise per sample
+    glow: 6,                // text-shadow blur radius in pixels
   };
 
   const stage = document.getElementById("stage");
@@ -124,6 +127,9 @@
     let prevX = 0;
     let prevY = 0;
 
+    // Pre-compute once; applied uniformly to every sample.
+    const rotationOffsetRad = (config.rotationOffset * Math.PI) / 180;
+
     for (let s = 0; s < sampleCount; s += 1) {
       const t = s / (sampleCount - 1);
 
@@ -140,17 +146,29 @@
 
       const radius = lerp(innerFib, outerFib, localR) * config.scale;
 
-      // Angle grows uniformly with t. angleStep multiplies the total winding,
-      // letting the user tighten or loosen the coil independently of radius.
-      const theta = t * totalSections * (Math.PI / 2) * config.angleStep;
+      // Angle grows uniformly with t. angleStep multiplies the total winding
+      // (negative values reverse the winding direction). rotationOffset
+      // adds a static rotation to the entire base shape.
+      const theta =
+        t * totalSections * (Math.PI / 2) * config.angleStep +
+        rotationOffsetRad;
 
       const normalizedRadius = radius / (maxFib * config.scale);
       const centeredRadius = radius * (1 - normalizedRadius * config.centerPull);
 
+      // radialJitter perturbs each sample's radius by a random amount, frozen
+      // until the next rebuild — so the shape wobbles statically rather than
+      // shimmering between frames.
+      const jitter =
+        config.radialJitter > 0
+          ? (Math.random() * 2 - 1) * config.radialJitter
+          : 0;
+      const jitteredRadius = centeredRadius + jitter;
+
       // aspectRatio squashes/stretches the horizontal axis for elliptical
       // variations of the shape.
-      const x = Math.cos(theta) * centeredRadius * config.aspectRatio;
-      const y = -Math.sin(theta) * centeredRadius;
+      const x = Math.cos(theta) * jitteredRadius * config.aspectRatio;
+      const y = -Math.sin(theta) * jitteredRadius;
 
       if (s > 0) cumArcLen += Math.hypot(x - prevX, y - prevY);
       baseSamples[s] = { x, y, arcLen: cumArcLen };
@@ -324,12 +342,16 @@
       nodes.forEach((node, i) => {
         node.textContent = randomChars[i];
       });
+    } else if (key === "glow") {
+      spiral.style.setProperty("--glow", `${config.glow}px`);
     } else if (
       key === "scale" ||
       key === "centerPull" ||
       key === "angleStep" ||
       key === "radiusCurve" ||
-      key === "aspectRatio"
+      key === "aspectRatio" ||
+      key === "rotationOffset" ||
+      key === "radialJitter"
     ) {
       // These change the geometry of the base spiral itself.
       buildBaseSpiralSamples();
@@ -403,6 +425,7 @@
     generateRandomCharSequence();
     buildBaseSpiralSamples();
     ensureNodePool();
+    spiral.style.setProperty("--glow", `${config.glow}px`);
     bindControls();
 
     updateTargetFromMouse(centerX + 180, centerY - 120);

@@ -16,7 +16,10 @@
 
     <aside id="controls" aria-label="Spiral controls">
       <details class="panel" open>
-        <summary>CONTROLS</summary>
+        <summary>
+          <span class="arrow" aria-hidden="true">&#9656;</span>
+          <span>CONTROLS</span>
+        </summary>
 
         <div class="panel-body">
           <label class="ctl">
@@ -67,7 +70,7 @@
 
             <label class="ctl">
               <span>angle step <output data-key="angleStep"></output></span>
-              <input type="range" data-key="angleStep" min="0.25" max="2.5" step="0.05" />
+              <input type="range" data-key="angleStep" min="-2.5" max="2.5" step="0.05" />
             </label>
 
             <label class="ctl">
@@ -78,6 +81,21 @@
             <label class="ctl">
               <span>aspect ratio <output data-key="aspectRatio"></output></span>
               <input type="range" data-key="aspectRatio" min="0.4" max="2.5" step="0.05" />
+            </label>
+
+            <label class="ctl">
+              <span>rotation offset <output data-key="rotationOffset"></output></span>
+              <input type="range" data-key="rotationOffset" min="-180" max="180" step="1" />
+            </label>
+
+            <label class="ctl">
+              <span>radial jitter <output data-key="radialJitter"></output></span>
+              <input type="range" data-key="radialJitter" min="0" max="30" step="0.5" />
+            </label>
+
+            <label class="ctl">
+              <span>glow <output data-key="glow"></output></span>
+              <input type="range" data-key="glow" min="0" max="24" step="1" />
             </label>
 
             <label class="ctl">
