@@ -48,6 +48,10 @@
   let currentAngle = 0;
   let currentScale = 1;
 
+  // Toggled by clicking the stage. When paused, the spiral freezes in place
+  // and no longer tracks the mouse until the user clicks again.
+  let paused = false;
+
   // Pool of reusable DOM nodes and their assigned (random) characters.
   let nodes = [];
   let randomChars = [];
@@ -227,6 +231,11 @@
   // ----- Render loop ---------------------------------------------------------
 
   function render() {
+    if (paused) {
+      requestAnimationFrame(render);
+      return;
+    }
+
     currentAngle += normalizeAngle(targetAngle - currentAngle) * config.smoothing;
     currentScale += (targetScale - currentScale) * config.smoothing;
 
@@ -297,7 +306,14 @@
     currentScale = targetScale;
 
     stage.addEventListener("mousemove", (event) => {
+      if (paused) return;
       updateTargetFromMouse(event.clientX, event.clientY);
+    });
+
+    // Click toggles pause. While paused the render loop keeps running but
+    // does not advance angle/scale, and mousemove input is ignored.
+    stage.addEventListener("click", () => {
+      paused = !paused;
     });
 
     window.addEventListener("resize", handleResize);
