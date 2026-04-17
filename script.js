@@ -33,6 +33,9 @@
     glow: 6,                // text-shadow blur radius in pixels
   };
 
+  // Frozen snapshot of the initial config, used by the reset button.
+  const DEFAULT_CONFIG = { ...config };
+
   const stage = document.getElementById("stage");
   const spiral = document.getElementById("spiral");
 
@@ -367,6 +370,34 @@
     });
   }
 
+  /**
+   * Restore every tunable to its initial value, resync the panel UI, and
+   * reapply the side-effects (font size, glow, random chars if the charset
+   * changed, and a single base-spiral rebuild).
+   */
+  function resetConfig() {
+    const charSetChanged = config.charSet !== DEFAULT_CONFIG.charSet;
+    Object.assign(config, DEFAULT_CONFIG);
+
+    const panel = document.getElementById("controls");
+    if (panel) {
+      panel.querySelectorAll("input[data-key]").forEach((input) => {
+        const key = input.dataset.key;
+        const value = config[key];
+        input.value = typeof value === "number" ? String(value) : value;
+        const out = panel.querySelector(`output[data-key="${key}"]`);
+        if (out) out.textContent = formatConfigValue(value);
+      });
+    }
+
+    if (charSetChanged) shuffleCharacters();
+    for (const node of nodes) {
+      node.style.fontSize = `${config.fontSize}px`;
+    }
+    spiral.style.setProperty("--glow", `${config.glow}px`);
+    buildBaseSpiralSamples();
+  }
+
   function bindControls() {
     const panel = document.getElementById("controls");
     if (!panel) return;
@@ -409,6 +440,7 @@
       event.stopPropagation();
       const action = event.target?.dataset?.action;
       if (action === "shuffle") shuffleCharacters();
+      else if (action === "reset") resetConfig();
     });
   }
 
