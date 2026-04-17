@@ -31,6 +31,7 @@
     rotationOffset: 0,      // static rotation added to the base spiral, in degrees
     radialJitter: 0,        // pixels of random radial noise per sample
     glow: 6,                // text-shadow blur radius in pixels
+    tStart: 0,              // start of the t-range; <0 adds a mirrored inner arm
   };
 
   // Frozen snapshot of the initial config, used by the reset button.
@@ -135,13 +136,19 @@
     // Pre-compute once; applied uniformly to every sample.
     const rotationOffsetRad = (config.rotationOffset * Math.PI) / 180;
 
-    for (let s = 0; s < sampleCount; s += 1) {
-      const t = s / (sampleCount - 1);
+    // t spans from tStart to 1. tStart < 0 mirrors an inner arm through the
+    // origin, producing a two-arm ("yin-yang") spiral whose outer tip still
+    // sits at t = 1 — the cursor-following end stays unchanged.
+    const tStart = Math.min(0.99, config.tStart);
+    const tRange = 1 - tStart;
 
-      // Radius growth is governed by a re-shaped parameter so that
-      // radiusCurve < 1 front-loads the growth (fat outer) and > 1 back-loads
-      // it (tight inner, explosive outer).
-      const tRadius = Math.pow(t, config.radiusCurve);
+    for (let s = 0; s < sampleCount; s += 1) {
+      const t = tStart + (s / (sampleCount - 1)) * tRange;
+
+      // Radius uses |t| so both sides grow outward from the origin. The
+      // radiusCurve shapes the growth (<1 front-loads, >1 back-loads).
+      const tAbs = Math.abs(t);
+      const tRadius = Math.pow(tAbs, config.radiusCurve);
       const scaledR = tRadius * totalSections;
       const sectionIndex = Math.min(totalSections - 1, Math.floor(scaledR));
       const localR = scaledR - sectionIndex;
@@ -151,9 +158,10 @@
 
       const radius = lerp(innerFib, outerFib, localR) * config.scale;
 
-      // Angle grows uniformly with t. angleStep multiplies the total winding
-      // (negative values reverse the winding direction). rotationOffset
-      // adds a static rotation to the entire base shape.
+      // Angle keeps the sign of t so negative t winds in the opposite
+      // direction, creating the mirrored arm. angleStep multiplies the
+      // total winding (negative values reverse it entirely); rotationOffset
+      // adds a static rotation to the whole shape.
       const theta =
         t * totalSections * (Math.PI / 2) * config.angleStep +
         rotationOffsetRad;
@@ -356,7 +364,8 @@
       key === "radiusCurve" ||
       key === "aspectRatio" ||
       key === "rotationOffset" ||
-      key === "radialJitter"
+      key === "radialJitter" ||
+      key === "tStart"
     ) {
       // These change the geometry of the base spiral itself.
       buildBaseSpiralSamples();

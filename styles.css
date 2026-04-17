@@ -113,6 +113,13 @@ body {
 
 /* Panel-specific layout tweaks. */
 
+#controls details.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 #controls details.panel[open] > summary {
   margin-bottom: 2px;
 }
@@ -121,6 +128,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+
+/* When expanded, the body fills remaining aside height and the children
+   redistribute so the vertical gaps between controls equalize. */
+#controls details.panel[open] > .panel-body {
+  flex: 1 1 auto;
+  justify-content: space-between;
 }
 
 #controls .ctl {
@@ -233,6 +247,14 @@ body {
   flex-direction: column;
   gap: 7px;
   margin-top: 4px;
+}
+
+/* When the inner disclosure is also open, its children distribute in the
+   same way — summary pinned at top, shuffle button at the bottom, ctls
+   spread out with equal gaps between them. */
+#controls details.more[open] {
+  flex: 1 1 auto;
+  justify-content: space-between;
 }
 
 #controls .cmd {
