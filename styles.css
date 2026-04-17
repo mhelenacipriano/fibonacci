@@ -282,3 +282,7 @@ body {
 #controls .cmd:active {
   background: #bbb;
 }
+
+.btn {
+  margin: auto;
+}
