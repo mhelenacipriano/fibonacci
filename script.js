@@ -124,6 +124,60 @@
    * slightly inward so the whole piece feels compact.
    */
   /**
+   * Compute a `scale` value that makes the active shape roughly fill the
+   * drawing area. For 3D shapes we also factor in the perspective projection
+   * (the closest face expands by D/(D-r)), so the apparent size stays within
+   * the viewport rather than the raw geometric size.
+   */
+  function fitScaleForShape(shape) {
+    // Spiral's sample builder already caps section count against a safeRadius
+    // derived from the viewport, so any reasonable scale fills it; keep the
+    // historically-tuned default so the spiral's turn count feels right.
+    if (shape === "spiral") return DEFAULT_CONFIG.scale;
+
+    const halfView = Math.min(spiral.clientWidth, spiral.clientHeight) / 2;
+    if (halfView <= 0) return DEFAULT_CONFIG.scale;
+
+    const target = halfView * 0.9;
+    const D = config.perspective;
+    const maxFib = fibonacciSequence(config.maxFibSections + 1).at(-1);
+
+    // Solve apparent = r * D / (D - r) = target  ⇒  r = target * D / (D + target).
+    const r = (target * D) / (D + target);
+
+    let raw;
+    if (shape === "cube") {
+      // Cube circumradius = (edgeLen/2) * √3, and edgeLen = maxFib * scale.
+      const half = r / Math.sqrt(3);
+      raw = (2 * half) / maxFib;
+    } else {
+      // Sphere: R = maxFib * scale * 0.55 (see buildSphereSamples).
+      raw = r / (maxFib * 0.55);
+    }
+
+    // Snap to the slider's 0.1 step and clamp to its range.
+    return clamp(Math.round(raw * 10) / 10, 0.5, 12);
+  }
+
+  /**
+   * Override `config.scale` with the fit value for the active shape and
+   * re-sync the scale slider's value + readout so the UI stays truthful.
+   * Called on init and on shape switch; not on resize (to preserve the
+   * user's manual tweaks in a session).
+   */
+  function applyAutoFitScale() {
+    const fit = fitScaleForShape(config.shape);
+    config.scale = fit;
+
+    const panel = document.getElementById("controls");
+    if (!panel) return;
+    const input = panel.querySelector('input[data-key="scale"]');
+    const out = panel.querySelector('output[data-key="scale"]');
+    if (input) input.value = String(fit);
+    if (out) out.textContent = formatConfigValue(fit);
+  }
+
+  /**
    * Dispatch to the builder for the active shape. All shapes consume the
    * same config knobs where meaningful: `scale` drives overall size,
    * `charSpacing` drives point density, `radialJitter` perturbs samples,
@@ -730,6 +784,7 @@
       btn.classList.toggle("active", btn.dataset.shape === shape);
     });
     applyShapeVisibility();
+    applyAutoFitScale();
     buildBaseSamples();
     // Re-derive targets for the new mode from the last known cursor center,
     // then snap so we don't ease in from stale rotation state.
@@ -762,6 +817,7 @@
 
   function init() {
     generateRandomCharSequence();
+    applyAutoFitScale();
     buildBaseSamples();
     ensureNodePool();
     spiral.style.setProperty("--glow", `${config.glow}px`);
