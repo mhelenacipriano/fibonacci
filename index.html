@@ -29,6 +29,11 @@
           </label>
 
           <label class="ctl">
+            <span>char count <output data-key="maxCharacterCount"></output></span>
+            <input type="range" data-key="maxCharacterCount" min="50" max="2500" step="50" />
+          </label>
+
+          <label class="ctl">
             <span>smoothing <output data-key="smoothing"></output></span>
             <input type="range" data-key="smoothing" min="0.02" max="0.3" step="0.01" />
           </label>
@@ -38,17 +43,17 @@
             <input type="range" data-key="scale" min="2" max="12" step="0.1" />
           </label>
 
-          <label class="ctl">
+          <label class="ctl" data-shapes="spiral">
             <span>center pull <output data-key="centerPull"></output></span>
             <input type="range" data-key="centerPull" min="0" max="0.5" step="0.01" />
           </label>
 
-          <label class="ctl">
+          <label class="ctl" data-shapes="spiral">
             <span>min scale <output data-key="minScaleFactor"></output></span>
             <input type="range" data-key="minScaleFactor" min="0.1" max="1" step="0.05" />
           </label>
 
-          <label class="ctl">
+          <label class="ctl" data-shapes="spiral">
             <span>max scale <output data-key="maxScaleFactor"></output></span>
             <input type="range" data-key="maxScaleFactor" min="1" max="6" step="0.1" />
           </label>
@@ -64,19 +69,39 @@
               <span>experiment further</span>
             </summary>
 
-            <label class="ctl">
+            <label class="ctl" data-shapes="spiral">
               <span>t start <output data-key="tStart"></output></span>
               <input type="range" data-key="tStart" min="-1" max="0" step="0.05" />
             </label>
 
-            <label class="ctl">
+            <label class="ctl" data-shapes="spiral">
               <span>angle step <output data-key="angleStep"></output></span>
               <input type="range" data-key="angleStep" min="-2.5" max="2.5" step="0.05" />
             </label>
 
-            <label class="ctl">
+            <label class="ctl" data-shapes="spiral">
               <span>radius curve <output data-key="radiusCurve"></output></span>
               <input type="range" data-key="radiusCurve" min="0.4" max="2.5" step="0.05" />
+            </label>
+
+            <label class="ctl" data-shapes="cube sphere">
+              <span>twist <output data-key="twist"></output></span>
+              <input type="range" data-key="twist" min="-360" max="360" step="5" />
+            </label>
+
+            <label class="ctl" data-shapes="cube sphere">
+              <span>perspective <output data-key="perspective"></output></span>
+              <input type="range" data-key="perspective" min="200" max="2000" step="50" />
+            </label>
+
+            <label class="ctl" data-shapes="cube">
+              <span>roundness <output data-key="roundness"></output></span>
+              <input type="range" data-key="roundness" min="0" max="1" step="0.02" />
+            </label>
+
+            <label class="ctl" data-shapes="sphere">
+              <span>pulse <output data-key="pulse"></output></span>
+              <input type="range" data-key="pulse" min="0" max="0.5" step="0.02" />
             </label>
 
             <label class="ctl">
@@ -114,6 +139,11 @@
     </aside>
 
     <main id="stage" aria-label="Interactive Fibonacci spiral artwork">
+      <div class="menu-shapes" role="menubar">
+        <button role="menuitem" class="shape-btn active" data-shape="spiral">spiral</button>
+        <button role="menuitem" class="shape-btn" data-shape="cube">cube</button>
+        <button role="menuitem" class="shape-btn" data-shape="sphere">sphere</button>
+      </div>
       <div id="spiral" aria-hidden="true"></div>
     </main>
 

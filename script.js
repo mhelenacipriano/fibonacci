@@ -10,6 +10,7 @@
    */
 
   const config = {
+    shape: "spiral",        // "spiral" | "cube" | "sphere"
     fontSize: 14,
     charSpacing: 16,        // fixed pixel distance between neighboring chars
     maxCharacterCount: 1100, // pool cap for performance
@@ -32,6 +33,13 @@
     radialJitter: 0,        // pixels of random radial noise per sample
     glow: 6,                // text-shadow blur radius in pixels
     tStart: 0,              // start of the t-range; <0 adds a mirrored inner arm
+
+    // --- 3D-shape params (cube / sphere). Applied at render time, so they
+    // never trigger a sample rebuild.
+    twist: 0,               // degrees of yaw twist applied per unit Y; spirals the shape vertically
+    perspective: 600,       // camera distance for the perspective projection; smaller = stronger
+    roundness: 0,           // cube only: morph cube edges toward a sphere of equal extent
+    pulse: 0,               // sphere only: sinusoidal radial bumpiness, 0 = smooth
   };
 
   // Frozen snapshot of the initial config, used by the reset button.
@@ -60,6 +68,17 @@
   let targetScale = 1;
   let currentAngle = 0;
   let currentScale = 1;
+
+  // 3D shapes (cube, sphere) use yaw/pitch driven by cursor position,
+  // smoothed the same way spiral angle/scale are.
+  let targetYaw = 0;
+  let targetPitch = 0;
+  let currentYaw = 0;
+  let currentPitch = 0;
+
+  // Rough bounding half-size of the current 3D shape, used for depth-based
+  // opacity shading.
+  let shapeExtent = 1;
 
   // Toggled by clicking the stage. When paused, the spiral freezes in place
   // and no longer tracks the mouse until the user clicks again.
@@ -104,14 +123,27 @@
    * Fibonacci-inspired growth. A small centerPull term nudges outer points
    * slightly inward so the whole piece feels compact.
    */
-  function buildBaseSpiralSamples() {
-    // Size and center are read from the stage itself — the controls panel is
-    // a sibling, so the stage occupies only the remaining viewport area.
-    width = stage.clientWidth;
-    height = stage.clientHeight;
+  /**
+   * Dispatch to the builder for the active shape. All shapes consume the
+   * same config knobs where meaningful: `scale` drives overall size,
+   * `charSpacing` drives point density, `radialJitter` perturbs samples,
+   * `aspectRatio` and `rotationOffset` are applied at render time.
+   */
+  function buildBaseSamples() {
+    // #spiral is now a flex child of #stage (sibling to the shape menu) and
+    // is the positioning context for the chars, so its dimensions define the
+    // drawing area — not the full stage.
+    width = spiral.clientWidth;
+    height = spiral.clientHeight;
     centerX = width / 2;
     centerY = height / 2;
 
+    if (config.shape === "cube") buildCubeSamples();
+    else if (config.shape === "sphere") buildSphereSamples();
+    else buildBaseSpiralSamples();
+  }
+
+  function buildBaseSpiralSamples() {
     const viewportLimit = Math.min(width, height);
     const safeRadius = viewportLimit * 0.38;
 
@@ -197,6 +229,93 @@
   }
 
   /**
+   * Wireframe cube: the 12 edges are sampled at fixed `charSpacing` intervals.
+   * Edge length tracks the largest Fibonacci section so the cube has the same
+   * size reference as the spiral at the same `scale`.
+   */
+  function buildCubeSamples() {
+    const fib = fibonacciSequence(config.maxFibSections + 1);
+    const edgeLen = fib.at(-1) * config.scale;
+    const half = edgeLen / 2;
+    shapeExtent = half * Math.sqrt(3);
+
+    const corners = [
+      [-half, -half, -half], [ half, -half, -half],
+      [ half,  half, -half], [-half,  half, -half],
+      [-half, -half,  half], [ half, -half,  half],
+      [ half,  half,  half], [-half,  half,  half],
+    ];
+    const edges = [
+      [0, 1], [1, 2], [2, 3], [3, 0],
+      [4, 5], [5, 6], [6, 7], [7, 4],
+      [0, 4], [1, 5], [2, 6], [3, 7],
+    ];
+
+    const perEdge = Math.max(2, Math.floor(edgeLen / config.charSpacing));
+    const total = Math.min(perEdge * edges.length, config.maxCharacterCount);
+    baseSamples = new Array(total);
+
+    let idx = 0;
+    for (const [a, b] of edges) {
+      const [ax, ay, az] = corners[a];
+      const [bx, by, bz] = corners[b];
+      for (let i = 0; i < perEdge && idx < total; i += 1, idx += 1) {
+        const t = i / (perEdge - 1);
+        const jx = config.radialJitter > 0 ? (Math.random() * 2 - 1) * config.radialJitter : 0;
+        const jy = config.radialJitter > 0 ? (Math.random() * 2 - 1) * config.radialJitter : 0;
+        const jz = config.radialJitter > 0 ? (Math.random() * 2 - 1) * config.radialJitter : 0;
+        baseSamples[idx] = {
+          x: lerp(ax, bx, t) + jx,
+          y: lerp(ay, by, t) + jy,
+          z: lerp(az, bz, t) + jz,
+        };
+      }
+    }
+    baseSamples.length = idx;
+  }
+
+  /**
+   * Fibonacci sphere: points distributed via the golden-angle spiral so the
+   * surface density is roughly uniform. Point count is derived from surface
+   * area / charSpacing², capped by the node pool.
+   */
+  function buildSphereSamples() {
+    const fib = fibonacciSequence(config.maxFibSections + 1);
+    const R = fib.at(-1) * config.scale * 0.55;
+    shapeExtent = R;
+
+    const area = 4 * Math.PI * R * R;
+    const target = Math.max(
+      20,
+      Math.min(
+        config.maxCharacterCount,
+        Math.floor(area / (config.charSpacing * config.charSpacing)),
+      ),
+    );
+
+    const phi = (Math.sqrt(5) + 1) / 2;
+    const goldenAngle = 2 * Math.PI * (1 - 1 / phi);
+
+    baseSamples = new Array(target);
+    for (let i = 0; i < target; i += 1) {
+      const yNorm = target > 1 ? 1 - (i / (target - 1)) * 2 : 0;
+      const ringR = Math.sqrt(Math.max(0, 1 - yNorm * yNorm));
+      const theta = i * goldenAngle;
+
+      const jitter =
+        config.radialJitter > 0
+          ? 1 + ((Math.random() * 2 - 1) * config.radialJitter) / Math.max(1, R)
+          : 1;
+
+      baseSamples[i] = {
+        x: Math.cos(theta) * ringR * R * jitter,
+        y: yNorm * R * jitter,
+        z: Math.sin(theta) * ringR * R * jitter,
+      };
+    }
+  }
+
+  /**
    * Return the interpolated (x, y) on the base spiral at a given cumulative
    * arc length (in base-space units). Uses binary search on the samples.
    */
@@ -263,16 +382,26 @@
    *   scale    = mouseDistance / tipNaturalRadius
    */
   function updateTargetFromMouse(clientX, clientY) {
-    const dx = clientX - centerX;
-    const dy = clientY - centerY;
-    const distance = Math.max(Math.hypot(dx, dy), config.minTipDistance);
+    if (config.shape === "spiral") {
+      const dx = clientX - centerX;
+      const dy = clientY - centerY;
+      const distance = Math.max(Math.hypot(dx, dy), config.minTipDistance);
 
-    targetAngle = Math.atan2(dy, dx) - tipNaturalAngle;
-    targetScale = clamp(
-      distance / tipNaturalRadius,
-      config.minScaleFactor,
-      config.maxScaleFactor
-    );
+      targetAngle = Math.atan2(dy, dx) - tipNaturalAngle;
+      targetScale = clamp(
+        distance / tipNaturalRadius,
+        config.minScaleFactor,
+        config.maxScaleFactor
+      );
+      return;
+    }
+
+    // 3D shapes: cursor position maps to yaw (horizontal) and pitch
+    // (vertical). Normalized to [-1, 1] against the stage half-size.
+    const nx = clamp((clientX - centerX) / Math.max(1, width / 2), -1, 1);
+    const ny = clamp((clientY - centerY) / Math.max(1, height / 2), -1, 1);
+    targetYaw = nx * Math.PI;
+    targetPitch = -ny * (Math.PI / 2);
   }
 
   // ----- Render loop ---------------------------------------------------------
@@ -283,6 +412,13 @@
       return;
     }
 
+    if (config.shape === "spiral") renderSpiral();
+    else render3D();
+
+    requestAnimationFrame(render);
+  }
+
+  function renderSpiral() {
     currentAngle += normalizeAngle(targetAngle - currentAngle) * config.smoothing;
     currentScale += (targetScale - currentScale) * config.smoothing;
 
@@ -333,8 +469,105 @@
       const floor = config.opacityFloor;
       node.style.opacity = (floor + (1 - floor) * progress).toFixed(3);
     }
+  }
 
-    requestAnimationFrame(render);
+  // Per-sample scratch for the 3D modulators; reused each frame so the hot
+  // loop in render3D doesn't allocate.
+  const sample3D = { x: 0, y: 0, z: 0 };
+
+  // Cube only: push each point from its current radius to the bounding-sphere
+  // radius. roundness = 1 turns the cube wireframe into a sphere of the same
+  // circumradius; intermediate values morph smoothly.
+  function applyRoundness(p, roundness, extent) {
+    const r = Math.hypot(p.x, p.y, p.z);
+    if (r === 0) return;
+    const f = 1 + roundness * (extent / r - 1);
+    p.x *= f; p.y *= f; p.z *= f;
+  }
+
+  // Sphere only: sinusoidal radial modulation indexed by longitude × latitude
+  // — produces a lumpy "golfball" surface as `amp` rises.
+  function applyPulse(p, amp, extent) {
+    const lon = Math.atan2(p.z, p.x);
+    const latNorm = clamp(p.y / extent, -1, 1);
+    const f = 1 + amp * Math.sin(lon * 6) * Math.cos(latNorm * Math.PI * 2);
+    p.x *= f; p.y *= f; p.z *= f;
+  }
+
+  // Yaw rotation around Y proportional to Y position — at twist = 360, the
+  // top and bottom of the shape differ by a full turn so strands spiral.
+  function applyTwist(p, twistRad, extent) {
+    const a = (p.y / extent) * twistRad;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    const tx = p.x * ca + p.z * sa;
+    const tz = -p.x * sa + p.z * ca;
+    p.x = tx; p.z = tz;
+  }
+
+  function setNodeShown(node, shown) {
+    const want = shown ? "" : "none";
+    if (node.style.display !== want) node.style.display = want;
+  }
+
+  function render3D() {
+    currentYaw += normalizeAngle(targetYaw - currentYaw) * config.smoothing;
+    currentPitch += normalizeAngle(targetPitch - currentPitch) * config.smoothing;
+
+    const cy = Math.cos(currentYaw);
+    const sy = Math.sin(currentYaw);
+    const cp = Math.cos(currentPitch);
+    const sp = Math.sin(currentPitch);
+    const rollRad = (config.rotationOffset * Math.PI) / 180;
+    const cr = Math.cos(rollRad);
+    const sr = Math.sin(rollRad);
+
+    const total = baseSamples.length;
+    const floor = config.opacityFloor;
+    const extent = Math.max(1, shapeExtent);
+    const D = config.perspective;
+    const twistRad = (config.twist * Math.PI) / 180;
+    const roundness = config.shape === "cube" ? config.roundness : 0;
+    const pulseAmp = config.shape === "sphere" ? config.pulse : 0;
+
+    for (let i = 0; i < config.maxCharacterCount; i += 1) {
+      const node = nodes[i];
+      if (i >= total) { setNodeShown(node, false); continue; }
+      setNodeShown(node, true);
+
+      const s = baseSamples[i];
+      sample3D.x = s.x; sample3D.y = s.y; sample3D.z = s.z;
+
+      if (roundness > 0) applyRoundness(sample3D, roundness, extent);
+      if (pulseAmp > 0) applyPulse(sample3D, pulseAmp, extent);
+      if (twistRad !== 0) applyTwist(sample3D, twistRad, extent);
+
+      const x = sample3D.x;
+      const y = sample3D.y;
+      const z = sample3D.z;
+
+      // Yaw (around Y), then pitch (around X).
+      const x1 = x * cy + z * sy;
+      const z1 = -x * sy + z * cy;
+      const y2 = y * cp - z1 * sp;
+      const z2 = y * sp + z1 * cp;
+
+      // Roll (around Z) — rotationOffset, the user's static spin.
+      const x3 = x1 * cr - y2 * sr;
+      const y3 = x1 * sr + y2 * cr;
+
+      // Perspective projection. Camera sits at (0, 0, -D) looking toward +z.
+      const depth = D / (D + z2);
+      const px = x3 * depth * config.aspectRatio;
+      const py = y3 * depth;
+
+      node.style.transform = `translate3d(${centerX + px}px, ${centerY + py}px, 0)`;
+
+      // Depth-based opacity: closer to camera = brighter. z2 ∈ roughly
+      // [-extent, +extent], so normalize about 0.
+      const depthT = clamp(0.5 - z2 / (2 * extent), 0, 1);
+      node.style.opacity = (floor + (1 - floor) * depthT).toFixed(3);
+    }
   }
 
   // ----- Controls panel ------------------------------------------------------
@@ -357,21 +590,32 @@
       });
     } else if (key === "glow") {
       spiral.style.setProperty("--glow", `${config.glow}px`);
-    } else if (
-      key === "scale" ||
-      key === "centerPull" ||
-      key === "angleStep" ||
-      key === "radiusCurve" ||
-      key === "aspectRatio" ||
-      key === "rotationOffset" ||
-      key === "radialJitter" ||
-      key === "tStart"
-    ) {
-      // These change the geometry of the base spiral itself.
-      buildBaseSpiralSamples();
+    } else if (key === "maxCharacterCount") {
+      // Pool size changed: re-roll the character sequence to fit, rebuild
+      // the DOM node pool, then resample so the 3D shapes' point counts
+      // (which are capped by maxCharacterCount) update.
+      generateRandomCharSequence();
+      ensureNodePool();
+      buildBaseSamples();
+    } else if (affectsGeometry(key)) {
+      buildBaseSamples();
     }
-    // charSpacing, smoothing, opacityFloor, min/maxScaleFactor take effect
-    // automatically on the next frame.
+    // charSpacing (spiral), smoothing, opacityFloor, min/maxScaleFactor take
+    // effect automatically on the next frame.
+  }
+
+  // Keys that trigger a sample rebuild. `charSpacing` only matters for 3D
+  // shapes (it drives their point count); the spiral interpolates it live.
+  function affectsGeometry(key) {
+    const spiralKeys = new Set([
+      "scale", "centerPull", "angleStep", "radiusCurve", "aspectRatio",
+      "rotationOffset", "radialJitter", "tStart",
+    ]);
+    const solidKeys = new Set([
+      "scale", "charSpacing", "radialJitter",
+    ]);
+    if (config.shape === "spiral") return spiralKeys.has(key);
+    return solidKeys.has(key);
   }
 
   function shuffleCharacters() {
@@ -401,12 +645,21 @@
       });
     }
 
-    if (charSetChanged) shuffleCharacters();
+    if (nodes.length !== config.maxCharacterCount) {
+      generateRandomCharSequence();
+      ensureNodePool();
+    } else if (charSetChanged) {
+      shuffleCharacters();
+    }
     for (const node of nodes) {
       node.style.fontSize = `${config.fontSize}px`;
     }
     spiral.style.setProperty("--glow", `${config.glow}px`);
-    buildBaseSpiralSamples();
+    document.querySelectorAll(".shape-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.shape === config.shape);
+    });
+    applyShapeVisibility();
+    buildBaseSamples();
   }
 
   function bindControls() {
@@ -457,27 +710,71 @@
 
   // ----- Lifecycle -----------------------------------------------------------
 
-  function handleResize() {
-    buildBaseSpiralSamples();
-    updateTargetFromMouse(centerX + 180, centerY - 120);
+  function snapToTargets() {
     currentAngle = targetAngle;
     currentScale = targetScale;
+    currentYaw = targetYaw;
+    currentPitch = targetPitch;
+  }
+
+  function handleResize() {
+    buildBaseSamples();
+    updateTargetFromMouse(centerX + 180, centerY - 120);
+    snapToTargets();
+  }
+
+  function setShape(shape) {
+    if (!shape || shape === config.shape) return;
+    config.shape = shape;
+    document.querySelectorAll(".shape-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.shape === shape);
+    });
+    applyShapeVisibility();
+    buildBaseSamples();
+    // Re-derive targets for the new mode from the last known cursor center,
+    // then snap so we don't ease in from stale rotation state.
+    snapToTargets();
+  }
+
+  /**
+   * Show/hide ctls based on `data-shapes`. Whitespace-separated tokens of
+   * shape names ("spiral", "cube", "sphere"); a ctl with no `data-shapes`
+   * attribute is always visible.
+   */
+  function applyShapeVisibility() {
+    const shape = config.shape;
+    document.querySelectorAll("[data-shapes]").forEach((el) => {
+      const shapes = el.dataset.shapes.split(/\s+/);
+      el.style.display = shapes.includes(shape) ? "" : "none";
+    });
+  }
+
+  function bindShapeMenu() {
+    const menu = document.querySelector(".menu-shapes");
+    if (!menu) return;
+    menu.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const btn = event.target.closest(".shape-btn");
+      if (!btn) return;
+      setShape(btn.dataset.shape);
+    });
   }
 
   function init() {
     generateRandomCharSequence();
-    buildBaseSpiralSamples();
+    buildBaseSamples();
     ensureNodePool();
     spiral.style.setProperty("--glow", `${config.glow}px`);
     bindControls();
+    bindShapeMenu();
+    applyShapeVisibility();
 
     updateTargetFromMouse(centerX + 180, centerY - 120);
-    currentAngle = targetAngle;
-    currentScale = targetScale;
+    snapToTargets();
 
     stage.addEventListener("mousemove", (event) => {
       if (paused) return;
-      const rect = stage.getBoundingClientRect();
+      const rect = spiral.getBoundingClientRect();
       updateTargetFromMouse(event.clientX - rect.left, event.clientY - rect.top);
     });
 

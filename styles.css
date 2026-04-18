@@ -26,18 +26,19 @@ body {
 }
 
 #stage {
-  position: relative;
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
   background: var(--bg);
-  cursor: crosshair;
 }
 
 #spiral {
-  position: absolute;
-  inset: 0;
+  flex: 1 1 auto;
+  position: relative;
   overflow: hidden;
+  cursor: crosshair;
 }
 
 .spiral-char {
@@ -246,7 +247,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  margin-top: 4px;
 }
 
 /* When the inner disclosure is also open, its children distribute in the
@@ -269,7 +269,6 @@ body {
   text-transform: uppercase;
   padding: 5px 10px;
   cursor: pointer;
-  margin-top: 4px;
 }
 
 #controls .cmd:hover,
@@ -283,6 +282,35 @@ body {
   background: #bbb;
 }
 
-.btn {
-  margin: auto;
+.menu-shapes {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+}
+
+.shape-btn {
+  background: #000;
+  box-shadow: none;
+  border: 1px solid #fff;
+  border-radius: 0;
+  color: #fff;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.shape-btn:hover,
+.shape-btn:focus {
+  background: #fff;
+  color: #000;
+  outline: none;
+}
+
+.shape-btn.active {
+  background: #fff;
+  color: #000;
 }
